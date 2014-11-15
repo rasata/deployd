@@ -113,7 +113,7 @@
 
 <p>Deployd servers are built using resources. Each resource handles its own unique URL. For example a list of todos could be served as a collection resource.</p>
 
-<pre><code>GET /todos?q={"$orderby": "created"}
+<pre><code>GET /todos?{"$orderby": "created"}
 </code></pre>
 
 <p>Deployd will route this to the <code>/todos</code> collection resource and hand it off to its module. The collection resource will execute a fetch from the storage engine passing the query <code>{"$orderby": "created"}</code> and execute the <code>GET</code> event handler if one has been attached, passing the event handler the current session and data retrieved. Finally, the http response will be handed the final object, potentially modified by an event handler.</p>
@@ -387,14 +387,14 @@ Content-Type: application/json
 
 <p>If you need to query additional types of properties, pass a JSON object as the <code>q</code> parameter with the properties you wish to filter:</p>
 
-<pre><code>GET /people?q={
+<pre><code>GET /people?{
   "age": 23
 }
 </code></pre>
 
 <p>The <code>q</code> parameter supports <a href="http://www.mongodb.org/display/DOCS/Advanced+Queries">MongoDB's query language</a> for particularly advanced queries. Note that Collections do not currently support embedded documents or arrays.</p>
 
-<pre><code>GET /people?q={
+<pre><code>GET /people?{
   "$orderby": { "age": 1 },
   "name": {
     "$regex": "^j"
