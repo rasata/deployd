@@ -1,7 +1,8 @@
 var fork = require('child_process').fork
   , spawn = require('child_process').spawn
   , shelljs = require('shelljs')
-  , fs = require('fs');
+  , fs = require('fs')
+  , path = require('path');
 
 
 if (!fs.existsSync('app.dpd')) {
@@ -18,10 +19,19 @@ if (fs.existsSync('data')) {
   shelljs.rm('-rf', 'data');
 }
 
+function generatePort() {
+  const portRange = [3000, 9000];
+  return Math.floor(Math.random() * (portRange[1] - portRange[0])) + portRange[0];
+}
+
+var deploydPath = path.join(process.cwd(), '..');
+
 // using `spawn` because with `fork` the child script won't be able to catch a `process.exit()` event
 // thus leaving mongod zombie processes behind. see https://github.com/joyent/node/issues/5766
-var proc = spawn(process.argv[0], ["../bin/dpd"], {env: process.env})
+var proc = spawn(process.argv[0], ["../node_modules/deployd-cli/bin/dpd", "--deploydPath", deploydPath, '--mongoPort', generatePort()], {env: process.env})
   , buf = '';
+
+var hitListening = false;
 
 proc.on("error", function(err) {
   console.error(err);
@@ -40,21 +50,29 @@ proc.stderr.on('data', function(data) {
   buf += data.toString();
 });
 
+proc.on('close', function(){
+  if (!hitListening) {
+    process.stdout.write("Something went wrong: \n\n" + buf);      
+    process.exit(1);
+  }
+});
+
 function kill(e) {
   if (e && e !== 0){
     process.stdout.write("Test run failed. dpd output was: \n\n" + buf);
   }
-  
+
   proc.on('close', function(){
     process.exit(e);
   });
-  
+
   proc.stdin.end(); // this will cause the process to exit (see mongod.js, handled there)
 }
 
 proc.once('listening', function (port){
+  hitListening = true;
   var mpjsProc = fork('../node_modules/mocha-phantomjs/bin/mocha-phantomjs', [ '--ignore-resource-errors', 'http://localhost:' + port ], {silent: true});
-  mpjsProc.on("error", function(err) { 
+  mpjsProc.on("error", function(err) {
     console.error(err);
   });
   mpjsProc.stdout.on('data', function(data) {
@@ -64,4 +82,4 @@ proc.once('listening', function (port){
     process.stderr.write(data.toString());
   });
   mpjsProc.on('exit', kill);
-})
+});

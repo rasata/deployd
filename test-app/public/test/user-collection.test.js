@@ -36,15 +36,16 @@ describe('User Collection', function() {
             expect(u).to.contain({ username: 'foo2' });
             done();
           });
-        });
 
-        dpd.users.post({ username: 'foo', password: 'bar', admin: true })
-        .then(function(res){
-          expect(res).to.exist;
-          return dpd.users.login({ username: 'foo', password: 'bar'});
-        })
-        .then(function(res){
-          dpd.users.post({ username: 'foo2', password: 'bar' });
+          dpd.once('server:acksession', function() {
+            dpd.users.post({ username: 'foo2', password: 'bar' });
+          });
+          
+          dpd.users.post({ username: 'foo', password: 'bar', admin: true })
+          .then(function(res){
+            expect(res).to.exist;
+            return dpd.users.login({ username: 'foo', password: 'bar'});
+          });
         });
       });
 
@@ -92,6 +93,27 @@ describe('User Collection', function() {
       it('should not crash the server when called without a body', function(done) {
         dpd.users.login(null, function(session, err) {
           expect(err).to.exist;
+          done();
+        });
+      });
+
+      it('should not crash the server when logging in with an invalid password', function(done) {
+        dpd.users.post({username: 'foo@bar.com', password: '123456'})
+        .then(function(res) {
+          expect(res).to.exist;
+          expect(res.username).to.equal('foo@bar.com');
+          dpd.users.login({username: 'foo@bar.com', password: {}}, function(session, err) {
+            expect(err).to.exist;
+            done();
+          });
+        });
+      });
+
+      it('should not crash the server when creating an user with an invalid password', function(done) {
+        dpd.users.post({username: 'foo@bar.com', password: {length: 10}})
+        .fail(function(err) {
+          expect(err).to.exist;
+          expect(err.errors.password).to.equal('is required');
           done();
         });
       });

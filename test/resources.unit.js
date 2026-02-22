@@ -6,10 +6,8 @@ var InternalResources = require('../lib/resources/internal-resources')
   , path = require('path')
   , testCollection = {type: 'Collection', path: '/my-objects', properties: {title: {type: 'string'}}}
   , Collection = require('../lib/resources/collection')
-  , ClientLib = require('../lib/resources/client-lib')
-  , configPath = './test/support/proj'
-  , Dashboard = require('../lib/resources/dashboard');
-  
+  , configPath = './test/support/proj';
+
 describe('InternalResources', function() {
   describe('.handle(ctx)', function() {
     beforeEach(function() {
@@ -19,7 +17,7 @@ describe('InternalResources', function() {
         sh.mkdir(__dirname + '/support/proj');
         sh.mkdir('-p', __dirname + '/support/proj/resources');
       }
-      
+
       this.ir = new InternalResources('__resources', {config: {configPath: configPath}});
     });
 
@@ -73,7 +71,7 @@ describe('InternalResources', function() {
       this.ir.handle({req: {method: 'POST', url: '/__resources/foo/get.js', isRoot: true}, url: '/foo/get.js', body: {value: "this.foo = 'bar';"}, done: function(err, resource) {
         if (err) return done(err);
         var fileVal = sh.cat(path.join(configPath, 'resources/foo/get.js'));
-        expect(fileVal).to.exist.and.to.equal("this.foo = 'bar';");
+        expect(fileVal.toString()).to.exist.and.to.equal("this.foo = 'bar';");
         done();
       }});
     });
@@ -142,7 +140,7 @@ describe('InternalResources', function() {
       sh.mkdir('-p', path.join(configPath, 'resources/bar'));
       JSON.stringify(q).to(path.join(configPath, 'resources/foo/config.json'));
       JSON.stringify(q2).to(path.join(configPath, 'resources/bar/config.json'));
-      
+
       test.ir.handle({req: {method: 'GET', url: '/__resources', isRoot: true}, url: '/', done: function(err, result) {
         if (err) return done(err);
         expect(result).to.have.length(2);
@@ -194,6 +192,65 @@ describe('InternalResources', function() {
         });
     });
 
+    it('should delete a resource named "foo/bar" when handling a DELETE request, but leave "foo" alone', function(done) {
+      var q = {path: '/foo', type: 'Bar'}
+        , q2 = {path: '/bar', type: 'Bar'}
+        , test = this;
+
+        sh.mkdir('-p', path.join(configPath, 'resources/foo/bar'));
+        sh.mkdir('-p', path.join(configPath, 'resources/foo'));
+        JSON.stringify(q).to(path.join(configPath, 'resources/foo/bar/config.json'));
+        JSON.stringify(q2).to(path.join(configPath, 'resources/foo/config.json'));
+
+        test.ir.handle({req: {method: 'DELETE', url: '/__resources/foo/bar', isRoot: true}, url: '/foo/bar', done: function() {
+          expect(sh.test('-d', path.join(configPath, 'resources/foo/bar'))).to.not.be.ok;
+          expect(sh.test('-d', path.join(configPath, 'resources/foo'))).to.be.ok;
+          
+          done();
+        }}, function() {
+          throw Error("next called");
+        });
+    });
+
+    it('should delete a resource named "foo" when handling a DELETE request, but leave "foo/bar" alone', function(done) {
+      var q = {path: '/foo', type: 'Bar'}
+        , q2 = {path: '/bar', type: 'Bar'}
+        , test = this;
+
+        sh.mkdir('-p', path.join(configPath, 'resources/foo/bar'));
+        sh.mkdir('-p', path.join(configPath, 'resources/foo'));
+        JSON.stringify(q).to(path.join(configPath, 'resources/foo/bar/config.json'));
+        JSON.stringify(q2).to(path.join(configPath, 'resources/foo/config.json'));
+
+        test.ir.handle({req: {method: 'DELETE', url: '/__resources/foo', isRoot: true}, url: '/foo', done: function() {
+          expect(sh.test('-f', path.join(configPath, 'resources/foo/config.json'))).to.not.be.ok;
+          expect(sh.test('-f', path.join(configPath, 'resources/foo/bar/config.json'))).to.be.ok;
+          expect(sh.test('-d', path.join(configPath, 'resources/foo/bar'))).to.be.ok;
+          
+          done();
+        }}, function() {
+          throw Error("next called");
+        });
+    });
+
+    it('should rename a resource named "foo/bar/foo" to "bar/foo/bar" properly', function(done) {
+      var q = {path: '/foo', type: 'Bar'}
+        , q2 = {path: '/bar', type: 'Bar'}
+        , test = this;
+
+        sh.mkdir('-p', path.join(configPath, 'resources/foo/bar/foo'));
+        JSON.stringify(q).to(path.join(configPath, 'resources/foo/bar/foo/config.json'));
+
+        test.ir.handle({req: {method: 'PUT', url: '/__resources/foo/bar/foo', isRoot: true}, url: '/foo/bar/foo', body: { type: 'Bar', id: '/bar/foo/bar' }, done: function() {
+          expect(sh.test('-d', path.join(configPath, 'resources/foo/bar/foo'))).to.not.be.ok;
+          expect(sh.test('-d', path.join(configPath, 'resources/bar/foo/bar'))).to.be.ok;
+          
+          done();
+        }}, function() {
+          throw Error("next called");
+        });
+    });
+
     it('should call callbacks for config changes with errors', function(done) {
       var file = path.join(configPath, 'resources/foo/config.json');
 
@@ -208,7 +265,6 @@ describe('InternalResources', function() {
                 name: 'foo',
                 config: {},
                 configChanged: function(config, fn){
-                  console.log('CONFIG CHANGED!');
                   return fn('ERROR');
                 }
               }
@@ -217,12 +273,11 @@ describe('InternalResources', function() {
           url: '/foo',
           body: {type: 'Foo', value: {something: 'new config'}},
           req: {
-            method: 'PUT', 
-            url: '/__resources/foo', 
+            method: 'PUT',
+            url: '/__resources/foo',
             isRoot: true
-          }, 
+          },
           done: function(err){
-            console.log('CALL');
             expect(err).to.exist.and.to.equal('ERROR');
             done();
           }
@@ -253,10 +308,10 @@ describe('InternalResources', function() {
           url: '/foo',
           body: {type: 'Foo', value: {something: 'new config'}},
           req: {
-            method: 'DELETE', 
-            url: '/__resources/foo', 
+            method: 'DELETE',
+            url: '/__resources/foo',
             isRoot: true
-          }, 
+          },
           done: function(err){
             expect(err).to.exist.and.to.equal('ERROR');
             done();
